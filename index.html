@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+
+<!-- FONTE FEMININA -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500&display=swap" rel="stylesheet">
+
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#ff6fae">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>Agenda da Milly</title>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<style>
+body{
+margin:0;
+font-family:system-ui;
+background:#0f0f14;
+color:white;
+}
+
+/* 🌸 TÍTULO AJUSTADO */
+header{
+background:#1c1c22;
+padding:16px;
+text-align:center;
+font-family:'Playfair Display', serif;
+font-weight:500;
+font-size:26px;
+color:#ffffff;
+;
+letter-spacing:1px;
+}
+
+.container{padding:15px}
+.hidden{display:none}
+
+input,select{
+width:100%;
+padding:10px;
+margin-top:6px;
+border-radius:10px;
+border:1px solid #333;
+background:#b1b1b17e;
+color:white;
+}
+
+button{
+background:#d3d3d380;
+border:none;
+border-radius:12px;
+padding:8px 14px;
+color:rgb(216, 216, 216);
+font-size:13px;
+margin:4px;
+cursor:pointer;
+}
+button.secondary{background:#2c2c34}
+
+.dashboard{
+display:grid;
+grid-template-columns:repeat(3,1fr);
+gap:10px;
+margin:10px 0;
+}
+
+.box{
+padding:10px;
+border-radius:15px;
+text-align:center;
+font-weight:bold;
+}
+
+.green{background:#1f3d2b;color:#32d74b}
+.yellow{background:#3d361f;color:#ffd60a}
+.red{background:#3d1f1f;color:#ff453a}
+
+.card{
+background:#1c1c22;
+padding:12px;
+border-radius:15px;
+margin-bottom:10px;
+}
+
+.actions{text-align:right}
+
+.statusPago{color:#32d74b}
+.statusPendente{color:#ffd60a}
+.statusCancelado{color:#ff453a}
+
+.float{
+position:fixed;
+right:20px;
+bottom:20px;
+width:60px;
+height:60px;
+border-radius:50%;
+font-size:30px;
+}
+
+.top{
+display:flex;
+flex-wrap:wrap;
+gap:6px;
+margin-bottom:10px;
+}
+
+canvas{max-height:15vh}
+
+/* 📆 SELETOR DE MÊS */
+.mes-box{
+display:flex;
+justify-content:center;
+margin:8px 0 12px 0;
+}
+
+.mes-box input[type="month"]{
+width:180px;
+padding:6px 10px;
+height:36px;
+font-size:14px;
+border-radius:12px;
+border:1px solid #333;
+background:#808080;
+color:rgb(0, 0, 0);
+text-align:center;
+}
+</style>
+</head>
+
+<body>
+
+<header>Agenda da Milly</header>
+
+<div id="login" class="container">
+<input id="senha" type="password" placeholder="Senha">
+<button onclick="entrar()" style="width:100%">Entrar</button>
+</div>
+
+<div id="app" class="hidden">
+<div class="container">
+
+<div class="top">
+<button onclick="mostrarTroca()">Alterar senha</button>
+
+<button class="secondary" onclick="backup()">💾 Backup</button>
+<label class="secondary">
+📂 Restaurar
+<input type="file" hidden onchange="restaurar(event)">
+</label>
+
+<button onclick="sair()">Sair</button>
+</div>
+
+<div id="trocar" class="hidden">
+<input id="codigo" placeholder="Código">
+<input id="novaSenha" placeholder="Nova senha">
+<button onclick="trocarSenha()">Confirmar</button>
+</div>
+
+<div class="mes-box">
+<input type="month" id="mes">
+</div>
+
+<div class="dashboard">
+<div class="box green">Pago<br>R$ <span id="pago">0</span></div>
+<div class="box yellow">Pendente<br>R$ <span id="pendente">0</span></div>
+<div class="box red">Cancelado<br>R$ <span id="cancelado">0</span></div>
+</div>
+
+<div class="card">
+<b>Total do mês (Pago + Pendente)</b><br>
+R$ <span id="totalMes">0</span>
+</div>
+
+<canvas id="pizza"></canvas>
+
+<div id="lista"></div>
+
+<div id="formulario" class="card hidden">
+<input id="cliente" placeholder="Cliente">
+
+<select id="tipo">
+<option>Segurança</option>
+<option>Bombeiro Civil</option>
+<option>Recepcionista</option>
+<option>Guarda-vidas</option>
+<option>Caixa</option>
+</select>
+
+<input type="date" id="data">
+<input type="time" id="inicio">
+<input type="time" id="fim">
+<input type="number" id="valor" placeholder="Valor">
+<input id="obs" placeholder="Observações">
+
+<button onclick="salvar()">Salvar</button>
+</div>
+
+</div>
+
+<button class="float" onclick="abrir()">＋</button>
+</div>
+
+<script>
+let servicos = JSON.parse(localStorage.getItem("servicos")||"[]");
+let editando = null;
+let chart;
+
+const senhaInput = senha;
+let senhaPadrao = localStorage.getItem("senha") || "1234";
+const codigoMestre = "9999";
+
+mes.value = new Date().toISOString().slice(0,7);
+
+/* 📅 DIA DA SEMANA */
+function diaSemana(data){
+const dias=["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"];
+return dias[new Date(data+"T00:00").getDay()];
+}
+
+/* 📆 FORMATA DATA PARA DD/MM/AAAA */
+function dataBR(data){
+const [ano,mes,dia] = data.split("-");
+return `${dia}/${mes}/${ano}`;
+}
+
+function entrar(){
+if(senhaInput.value===senhaPadrao){
+login.classList.add("hidden");
+app.classList.remove("hidden");
+localStorage.setItem("logado","1");
+render();
+}else alert("Senha incorreta");
+}
+
+if(localStorage.getItem("logado")){
+login.classList.add("hidden");
+app.classList.remove("hidden");
+}
+
+function sair(){
+localStorage.removeItem("logado");
+app.classList.add("hidden");
+login.classList.remove("hidden");
+senhaInput.value="";
+}
+
+function mostrarTroca(){trocar.classList.toggle("hidden")}
+
+function trocarSenha(){
+if(codigo.value!==codigoMestre) return alert("Código inválido");
+senhaPadrao = novaSenha.value;
+localStorage.setItem("senha",senhaPadrao);
+alert("Senha alterada");
+trocar.classList.add("hidden");
+}
+
+function abrir(){formulario.classList.toggle("hidden")}
+
+function salvar(){
+let s={
+cliente:cliente.value,
+tipo:tipo.value,
+data:data.value,
+inicio:inicio.value,
+fim:fim.value,
+valor:Number(valor.value),
+status:editando!==null?servicos[editando].status:"Pendente",
+obs:obs.value
+};
+if(editando!==null){
+servicos[editando]=s;
+editando=null;
+}else servicos.push(s);
+
+localStorage.setItem("servicos",JSON.stringify(servicos));
+formulario.classList.add("hidden");
+render();
+}
+
+function editar(i){
+let s=servicos[i];
+editando=i;
+formulario.classList.remove("hidden");
+cliente.value=s.cliente;
+tipo.value=s.tipo;
+data.value=s.data;
+inicio.value=s.inicio;
+fim.value=s.fim;
+valor.value=s.valor;
+obs.value=s.obs;
+}
+
+function apagar(i){
+if(confirm("Excluir?")){
+servicos.splice(i,1);
+localStorage.setItem("servicos",JSON.stringify(servicos));
+render();
+}
+}
+
+function setStatus(i,s){
+servicos[i].status=s;
+localStorage.setItem("servicos",JSON.stringify(servicos));
+render();
+}
+
+function render(){
+lista.innerHTML="";
+let p=0,pen=0,can=0;
+
+let f=servicos.filter(s=>s.data.startsWith(mes.value));
+f.sort((a,b)=>new Date(a.data+"T"+a.inicio)-new Date(b.data+"T"+b.inicio));
+
+f.forEach(s=>{
+let i=servicos.indexOf(s);
+
+if(s.status=="Pago")p+=s.valor;
+if(s.status=="Pendente")pen+=s.valor;
+if(s.status=="Cancelado")can+=s.valor;
+
+lista.innerHTML+=`
+<div class="card">
+<b>${s.cliente}</b><br>
+${s.tipo}<br>
+${diaSemana(s.data)} - ${dataBR(s.data)} ${s.inicio}-${s.fim}<br>
+R$ ${s.valor}<br>
+<span class="status${s.status}">${s.status}</span>
+<div class="actions">
+<button onclick="setStatus(${i},'Pago')">💰</button>
+<button onclick="setStatus(${i},'Pendente')">⏳</button>
+<button onclick="setStatus(${i},'Cancelado')">❌</button>
+<button onclick="editar(${i})">✏</button>
+<button onclick="apagar(${i})">🗑</button>
+</div>
+</div>`;
+});
+
+pago.innerText=p.toFixed(2);
+pendente.innerText=pen.toFixed(2);
+cancelado.innerText=can.toFixed(2);
+totalMes.innerText=(p+pen).toFixed(2);
+
+grafico(p,pen,can);
+}
+
+function grafico(p,pen,can){
+if(chart) chart.destroy();
+let total=p+pen+can||1;
+chart=new Chart(pizza,{
+type:"pie",
+data:{
+labels:[
+`Pago ${(p/total*100).toFixed(1)}%`,
+`Pendente ${(pen/total*100).toFixed(1)}%`,
+`Cancelado ${(can/total*100).toFixed(1)}%`
+],
+datasets:[{
+data:[p,pen,can],
+backgroundColor:["#32d74b","#ffd60a","#ff453a"]
+}]
+}
+});
+}
+
+function backup(){
+const blob=new Blob([JSON.stringify(servicos)],{type:"application/json"});
+const a=document.createElement("a");
+a.href=URL.createObjectURL(blob);
+a.download="backup-agenda.json";
+a.click();
+}
+
+function restaurar(e){
+const reader=new FileReader();
+reader.onload=()=>{
+servicos=JSON.parse(reader.result);
+localStorage.setItem("servicos",JSON.stringify(servicos));
+render();
+alert("Backup restaurado!");
+};
+reader.readAsText(e.target.files[0]);
+}
+
+mes.onchange=render;
+render();
+</script>
+
+</body>
+</html>
